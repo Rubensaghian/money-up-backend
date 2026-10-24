@@ -26,6 +26,7 @@ dependencies {
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 	testAnnotationProcessor 'org.projectlombok:lombok'
 	implementation 'com.plaid:plaid-java:47.0.0'
+	runtimeOnly 'me.paulschwarz:dotenv-dev-support:4.0.0'
 }
 
 tasks.named('test') {
