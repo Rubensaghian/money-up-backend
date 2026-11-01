@@ -1,6 +1,5 @@
 package com.moneyup.backend.controller;
 
-
 import com.moneyup.backend.service.PlaidService;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -26,7 +25,8 @@ public class PlaidController {
     }
 
     @PostMapping("swap_public_token")
-    public Map<String,String> swapPublicToken(@RequestBody String publicToken) throws IOException {
+    public Map<String,String> swapPublicToken(@RequestBody Map<String,String> request) throws IOException {
+       String publicToken = request.get("public_token");
         String accessToken = plaidService.swapPublicToken(publicToken);
         return Map.of("access_token", accessToken);
     }
