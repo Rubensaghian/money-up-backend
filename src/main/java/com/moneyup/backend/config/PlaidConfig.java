@@ -14,14 +14,14 @@ import java.util.HashMap;
 public class PlaidConfig {
 
     @Bean
-    public PlaidApi plaidConfig(
+    public PlaidApi plaidApi(
         @Value("${plaid.client-id}") String clientId,
         @Value("${plaid.secret}") String secret,
         @Value("${plaid.environment}") String environment
     ) {
 
         HashMap<String, String> cred = new HashMap<>();
-        cred.put("client_id", clientId);
+        cred.put("clientId", clientId);
         cred.put("secret", secret);
 
         String baseurl = switch (environment) {
