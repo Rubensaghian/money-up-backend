@@ -27,7 +27,8 @@ public class PlaidController {
 
     @PostMapping("swap_public_token")
     public Map<String,String> swapPublicToken(@RequestBody String publicToken) throws IOException {
-
+        String accessToken = plaidService.swapPublicToken(publicToken);
+        return Map.of("access_token", accessToken);
     }
 
 }
