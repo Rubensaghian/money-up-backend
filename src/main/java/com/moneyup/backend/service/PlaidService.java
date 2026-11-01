@@ -34,8 +34,22 @@ public class PlaidService {
         LinkTokenCreateResponse body = response.body();
 
         if (!response.isSuccessful() || body == null) {
-            throw new IOException("Plaid Token Creation Failed with status: " + response.code());
+            throw new IOException("Plaid Token Creation failed with status: " + response.code());
         }
         return body.getLinkToken();
+    }
+
+    public String swapPublicToken(String publicToken) throws IOException {
+        ItemPublicTokenExchangeRequest request = new ItemPublicTokenExchangeRequest()
+                .publicToken(publicToken);
+
+        Response<ItemPublicTokenExchangeResponse> response =
+                plaidClient.itemPublicTokenExchange(request).execute();
+
+        ItemPublicTokenExchangeResponse body = response.body();
+        if (!response.isSuccessful() || body == null) {
+            throw new IOException("Plaid Token exchange failed with status: " + response.code());
+        }
+        return body.getAccessToken();
     }
 }
