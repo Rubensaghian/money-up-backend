@@ -47,5 +47,7 @@ public class PlaidConnection {
     private Instant accountsLastFetchedAt;
 
     @Column(name = "cursor")
+    @Getter
+    @Setter
     private String cursor;
 }
