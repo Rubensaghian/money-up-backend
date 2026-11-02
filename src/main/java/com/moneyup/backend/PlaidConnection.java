@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.time.Instant;
 import java.util.UUID;
 
 @Entity
@@ -29,4 +30,19 @@ public class PlaidConnection {
     @Setter
     @Column(name = "access_token_encrypted", nullable = false)
     private String accessTokenEncrypted;
+
+    @Getter
+    @Setter
+    @Column(name = "institution_id", columnDefinition = "text")
+    private String institutionId;
+
+    @Getter
+    @Setter
+    @Column(name = "institution_name", columnDefinition = "text")
+    private String institutionName;
+
+    @Getter
+    @Setter
+    @Column(name = "accounts_last_fetched_at")
+    private Instant accountsLastFetchedAt;
 }
