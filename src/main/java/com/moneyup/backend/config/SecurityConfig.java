@@ -5,6 +5,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.jspecify.annotations.NonNull;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
@@ -76,11 +77,18 @@ public class SecurityConfig {
                 .cors(cors -> {})
                 .authorizeHttpRequests(
                         auth
-                                -> auth.requestMatchers("/api/auth/**")
+                                -> auth.requestMatchers(HttpMethod.POST, "/api/auth/login", "/api/auth/signup")
+                                .permitAll()
+                                .requestMatchers(HttpMethod.GET, "/api/auth/csrf")
                                 .permitAll()
                                 .anyRequest()
                                 .authenticated())
                 .formLogin(AbstractHttpConfigurer::disable)
+                .logout(logout -> logout
+                        .logoutUrl("/api/auth/logout")
+                        .deleteCookies("JSESSIONID")
+                        .logoutSuccessHandler((request, response, authentication) ->
+                                response.setStatus(HttpServletResponse.SC_NO_CONTENT)))
                 .exceptionHandling(exceptions -> exceptions
                         .authenticationEntryPoint((request, response, exception) -> {
                             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);

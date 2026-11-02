@@ -106,8 +106,9 @@ class AuthControllerTests {
                 .andExpect(jsonPath("$.password").doesNotExist());
 
         assertNotEquals(anonymousSessionId, csrf.session().getId());
-        mvc.perform(get("/test/protected").session(csrf.session()))
+        mvc.perform(get("/api/me").session(csrf.session()))
                 .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", "no-store"))
                 .andExpect(jsonPath("$.username").value("alice"));
     }
 
@@ -123,7 +124,7 @@ class AuthControllerTests {
         assertNotEquals(anonymousSessionId, csrf.session().getId());
         assertNotEquals("test-password", users.get("alice").getPasswordHash());
         assertTrue(passwordEncoder.matches("test-password", users.get("alice").getPasswordHash()));
-        mvc.perform(get("/test/protected").session(csrf.session()))
+        mvc.perform(get("/api/me").session(csrf.session()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.username").value("alice"));
     }
@@ -212,6 +213,59 @@ class AuthControllerTests {
                 .andExpect(jsonPath("$.message").value("Please provide valid account details."));
     }
 
+    @Test
+    void sessionCheckRequiresAuthentication() throws Exception {
+        mvc.perform(get("/api/me"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("Please log in to continue."));
+    }
+
+    @Test
+    void otherAuthEndpointsAreProtectedByDefault() throws Exception {
+        mvc.perform(get("/api/auth/internal"))
+                .andExpect(status().isUnauthorized());
+
+        existingUser();
+        Token csrf = csrf(null);
+        mvc.perform(jsonPost("/api/auth/login", LOGIN, csrf)).andExpect(status().isOk());
+        mvc.perform(get("/api/auth/internal").session(csrf.session()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.username").value("alice"));
+    }
+
+    @Test
+    void wrongHttpMethodDoesNotMakeAnEndpointPublic() throws Exception {
+        mvc.perform(get("/api/auth/login")).andExpect(status().isUnauthorized());
+        mvc.perform(jsonPost("/api/auth/csrf", "{}", csrf(null)))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void logoutInvalidatesTheSession() throws Exception {
+        existingUser();
+        Token csrf = csrf(null);
+        mvc.perform(jsonPost("/api/auth/login", LOGIN, csrf)).andExpect(status().isOk());
+        Token logoutToken = csrf(csrf.session());
+        mvc.perform(jsonPost("/api/auth/logout", "{}", logoutToken))
+                .andExpect(status().isNoContent())
+                .andExpect(cookie().maxAge("JSESSIONID", 0));
+
+        assertTrue(csrf.session().isInvalid());
+        mvc.perform(get("/api/me")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void logoutWithoutCsrfDoesNotInvalidateTheSession() throws Exception {
+        existingUser();
+        Token csrf = csrf(null);
+        mvc.perform(jsonPost("/api/auth/login", LOGIN, csrf)).andExpect(status().isOk());
+
+        mvc.perform(post("/api/auth/logout").session(csrf.session()))
+                .andExpect(status().isForbidden());
+        mvc.perform(get("/api/me").session(csrf.session()))
+                .andExpect(status().isOk());
+    }
+
     private Token csrf(MockHttpSession session) throws Exception {
         var request = get("/api/auth/csrf");
         if (session != null) request.session(session);
@@ -238,7 +292,7 @@ class AuthControllerTests {
     @Configuration
     @EnableWebMvc
     @EnableWebSecurity
-    @Import({SecurityConfig.class, PasswordConfig.class, AuthController.class, AuthExceptionHandler.class,
+    @Import({SecurityConfig.class, PasswordConfig.class, AuthController.class, AuthExceptionHandler.class, SessionController.class,
             UserService.class, MoneyUpUserDetailsService.class, ProtectedController.class})
     static class Config {
         @Bean UserRepository repository() { return mock(UserRepository.class); }
@@ -248,6 +302,9 @@ class AuthControllerTests {
     static class ProtectedController {
         @GetMapping("/test/protected")
         Map<String, String> currentUser(Principal principal) { return Map.of("username", principal.getName()); }
+
+        @GetMapping("/api/auth/internal")
+        Map<String, String> internal(Principal principal) { return Map.of("username", principal.getName()); }
 
         @PostMapping("/test/protected")
         Map<String, String> protectedWrite(Principal principal) { return Map.of("username", principal.getName()); }
