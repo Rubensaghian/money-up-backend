@@ -29,10 +29,14 @@ public class PlaidController {
     }
 
     @PostMapping("swap_public_token")
-    public Map<String,String> swapPublicToken(@RequestBody Map<String,String> request) throws IOException {
-       String publicToken = request.get("public_token");
-        String accessToken = plaidService.swapPublicToken(publicToken);
-        return Map.of("access_token", accessToken);
+    public Map<String,String> swapPublicToken(
+            @RequestBody Map<String,String> request, Authentication authentication) throws IOException {
+
+        String username = authentication.getName();
+
+        String publicToken = request.get("public_token");
+        String connectionId = plaidService.swapPublicToken(publicToken, username);
+        return Map.of("connection_id", connectionId);
     }
 
 }
