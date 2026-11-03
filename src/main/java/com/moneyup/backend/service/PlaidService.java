@@ -4,10 +4,14 @@ import com.moneyup.backend.Accounts;
 import com.moneyup.backend.PlaidConnection;
 import com.moneyup.backend.Repository.AccountsRepository;
 import com.moneyup.backend.Repository.PlaidConnectionRepository;
+import com.moneyup.backend.Repository.TransactionRepository;
 import com.moneyup.backend.Repository.UserRepository;
+import com.moneyup.backend.Transaction;
 import com.moneyup.backend.User;
 import com.moneyup.backend.dto.AccountResponse;
+import com.moneyup.backend.dto.AllTransactionResponse;
 import com.moneyup.backend.dto.PlaidConnectionResponse;
+import com.moneyup.backend.dto.TransactionResponse;
 import com.plaid.client.model.*;
 import com.plaid.client.request.PlaidApi;
 import org.springframework.http.HttpStatus;
@@ -29,6 +33,7 @@ public class PlaidService {
     private final TextEncryptor tokenEncryptor;
     private final AccountsRepository accountsRepository;
     private final AccountSnapshotService accountSnapshotService;
+    private final TransactionRepository transactionRepository;
 
     public PlaidService(
             PlaidApi plaidClient,
@@ -36,14 +41,15 @@ public class PlaidService {
             PlaidConnectionRepository plaidConnectionRepository,
             TextEncryptor tokenEncryptor,
             AccountsRepository accountsRepository,
-            AccountSnapshotService accountSnapshotService
-    ) {
+            AccountSnapshotService accountSnapshotService,
+            TransactionRepository transactionRepository) {
         this.plaidClient = plaidClient;
         this.userRepository = userRepository;
         this.plaidConnectionRepository = plaidConnectionRepository;
         this.tokenEncryptor = tokenEncryptor;
         this.accountsRepository = accountsRepository;
         this.accountSnapshotService = accountSnapshotService;
+        this.transactionRepository = transactionRepository;
     }
 
     private User getUser(String username) {
@@ -149,5 +155,36 @@ public class PlaidService {
             }
         }
         if (firstFailure != null) throw firstFailure;
+    }
+
+
+    @Transactional(readOnly = true)
+    public List<AllTransactionResponse> getTransactions(String username) {
+        User user = getUser(username);
+
+        List<PlaidConnection> connections = plaidConnectionRepository.findAllByUserId(user.getId());
+
+        if (connections.isEmpty()) return List.of();
+
+        List<UUID> connectionIds = connections.stream().map(PlaidConnection::getId).toList();
+
+        List<AllTransactionResponse> allTransactions = new ArrayList<>();
+
+        for (Accounts accounts : accountsRepository.findAllByPlaidConnectionIdInAndActiveTrueOrderByNameAsc(connectionIds)) {
+            List<TransactionResponse> transactions = new ArrayList<>();
+            for (Transaction transaction : transactionRepository.findAllByAccountId(accounts.getId())) {
+                TransactionResponse transactionResponse = new TransactionResponse(
+                        transaction.getId(), transaction.getAmount(), transaction.getIsoCurrencyCode() != null ?
+                        transaction.getIsoCurrencyCode() : transaction.getUnofficialCurrencyCode(), transaction.getMerchantName());
+                transactions.add(transactionResponse);
+            }
+            AllTransactionResponse allTransactionResponse = new AllTransactionResponse(
+                    accounts.getId(), accounts.getName(), accounts.getSubtype(), transactions
+            );
+
+            allTransactions.add(allTransactionResponse);
+        }
+
+        return allTransactions;
     }
 }

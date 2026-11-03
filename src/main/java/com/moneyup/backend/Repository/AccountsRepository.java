@@ -10,5 +10,9 @@ import java.util.UUID;
 public interface AccountsRepository extends JpaRepository<Accounts, UUID> {
     List<Accounts> findAllByPlaidConnectionId(UUID plaidConnectionId);
 
+    Accounts findByPlaidAccountId(String plaidAccountId);
+
     List<Accounts> findAllByPlaidConnectionIdInAndActiveTrueOrderByNameAsc(Collection<UUID> connectionIds);
+
+    boolean existsByPlaidAccountId(String plaidAccountId);
 }

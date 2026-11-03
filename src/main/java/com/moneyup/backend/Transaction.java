@@ -45,7 +45,7 @@ public class Transaction {
     @Column(name = "date",  nullable = false)
     @Getter
     @Setter
-    private Instant date;
+    private LocalDate date;
 
     @Column(name = "pending",  nullable = false)
     @Getter
@@ -61,5 +61,10 @@ public class Transaction {
     @Getter
     @Setter
     private String plaidTransactionId;
+
+    @Column(name = "merchant_name")
+    @Getter
+    @Setter
+    private String merchantName;
 
 }

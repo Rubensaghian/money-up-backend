@@ -10,5 +10,7 @@ import java.util.UUID;
 public interface TransactionRepository extends JpaRepository<Transaction, UUID> {
     Optional<Transaction> findByAccountIdAndPlaidTransactionId(UUID accountId, String plaidTransactionId);
 
-    List<Transaction> findByAccountId(UUID accountId);
+    List<Transaction> findAllByAccountId(UUID accountId);
+
+    boolean existsByAccountIdAndPlaidTransactionId(UUID accountId, String plaidTransactionId);
 }
