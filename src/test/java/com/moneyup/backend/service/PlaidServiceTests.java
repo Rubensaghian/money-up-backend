@@ -36,7 +36,6 @@ class PlaidServiceTests {
     private TextEncryptor encryptor;
     private PlaidService service;
     private User user;
-    private TransactionRepository transactions;
 
     @BeforeEach
     void setup() {
@@ -46,7 +45,7 @@ class PlaidServiceTests {
         accounts = mock(AccountsRepository.class);
         snapshots = mock(AccountSnapshotService.class);
         encryptor = Encryptors.delux("test-secret-used-only-for-unit-tests", "0011223344556677");
-        service = new PlaidService(api, users, connections, encryptor, accounts, snapshots, transactions);
+        service = new PlaidService(api, users, connections, encryptor, accounts, snapshots);
         user = new User();
         user.setId(UUID.randomUUID());
         user.setUsername("alice");
