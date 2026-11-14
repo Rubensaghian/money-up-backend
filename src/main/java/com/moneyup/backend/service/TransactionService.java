@@ -60,7 +60,8 @@ public class TransactionService {
             for (Transaction transaction : transactionRepository.findAllByAccountId(accounts.getId())) {
                 TransactionResponse transactionResponse = new TransactionResponse(
                         transaction.getId(), transaction.getAmount(), transaction.getIsoCurrencyCode() != null ?
-                        transaction.getIsoCurrencyCode() : transaction.getUnofficialCurrencyCode(), transaction.getMerchantName());
+                        transaction.getIsoCurrencyCode() : transaction.getUnofficialCurrencyCode(), transaction.getMerchantName(),
+                        transaction.getDate(), transaction.getPending());
                 transactions.add(transactionResponse);
             }
             AllTransactionResponse allTransactionResponse = new AllTransactionResponse(

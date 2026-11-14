@@ -19,7 +19,7 @@ public class TransactionController {
     }
 
     @GetMapping("/api/transactions")
-    public ResponseEntity<List<AllTransactionResponse>> addTransaction(Authentication authentication) {
+    public ResponseEntity<List<AllTransactionResponse>> getTransaction(Authentication authentication) {
         return ResponseEntity.ok()
                 .body(transactionService.getTransactions(authentication.getName()));
 
