@@ -88,7 +88,7 @@ public class TransactionSyncService {
                 transactionsToUpdate, transactionsToDelete, body.getNextCursor(), connection);
     }
 
-    public void handleUpdateTransactions(@NonNull List<Transaction> update, PlaidConnection connection,
+    private void handleUpdateTransactions(@NonNull List<Transaction> update, PlaidConnection connection,
                                          List<com.moneyup.backend.Transaction> transactionsToUpdate) throws IOException {
         if (update.isEmpty()) return;
 
@@ -117,7 +117,7 @@ public class TransactionSyncService {
         }
     }
 
-    public void handleDeletedTransactions(@NonNull List<RemovedTransaction> deleted, PlaidConnection connection,
+    private void handleDeletedTransactions(@NonNull List<RemovedTransaction> deleted, PlaidConnection connection,
                                           List<com.moneyup.backend.Transaction> transactionsToDelete) throws IOException {
         if (deleted.isEmpty()) return;
 

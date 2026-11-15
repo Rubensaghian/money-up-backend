@@ -3,6 +3,7 @@ package com.moneyup.backend.controller;
 import com.moneyup.backend.config.PasswordConfig;
 import com.moneyup.backend.config.SecurityConfig;
 import com.moneyup.backend.dto.AccountResponse;
+import com.moneyup.backend.dto.ConnectionSetupResponse;
 import com.moneyup.backend.dto.PlaidConnectionResponse;
 import com.moneyup.backend.service.MoneyUpUserDetailsService;
 import com.moneyup.backend.service.PlaidService;
@@ -142,18 +143,50 @@ class PlaidControllerTests {
     }
 
     @Test
-    void exchangeAcceptsTheLinkPublicTokenAndReturnsOnlyAnInternalId() throws Exception {
+    void exchangeAcceptsTheLinkPublicTokenAndReturnsInitializationStatus() throws Exception {
         MockHttpSession session = authenticatedSession();
         CsrfToken csrf = csrf(session);
-        String id = UUID.randomUUID().toString();
-        when(service.swapPublicToken("public-test", "alice")).thenReturn(id);
+        UUID id = UUID.randomUUID();
+        when(service.swapPublicToken("public-test", "alice"))
+                .thenReturn(new ConnectionSetupResponse(id, true));
 
         mvc.perform(post("/swap_public_token").session(session)
                         .header(csrf.getHeaderName(), csrf.getToken())
                         .contentType(MediaType.APPLICATION_JSON).content("{\"public_token\":\"public-test\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.connection_id").value(id))
+                .andExpect(jsonPath("$.connection_id").value(id.toString()))
+                .andExpect(jsonPath("$.initialized").value(true))
                 .andExpect(jsonPath("$.access_token").doesNotExist());
+    }
+
+    @Test
+    void aLinkedBankWithFailedInitializationStillReturnsItsConnectionId() throws Exception {
+        MockHttpSession session = authenticatedSession();
+        CsrfToken csrf = csrf(session);
+        UUID id = UUID.randomUUID();
+        when(service.swapPublicToken("public-test", "alice"))
+                .thenReturn(new ConnectionSetupResponse(id, false));
+
+        mvc.perform(post("/swap_public_token").session(session)
+                        .header(csrf.getHeaderName(), csrf.getToken())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"public_token\":\"public-test\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.connection_id").value(id.toString()))
+                .andExpect(jsonPath("$.initialized").value(false))
+                .andExpect(jsonPath("$.access_token").doesNotExist());
+    }
+
+    @Test
+    void aFailedTokenExchangeReturnsAnErrorInsteadOfAConnection() throws Exception {
+        MockHttpSession session = authenticatedSession();
+        CsrfToken csrf = csrf(session);
+        when(service.swapPublicToken("public-test", "alice")).thenThrow(new IOException("Exchange unavailable"));
+
+        mvc.perform(post("/swap_public_token").session(session)
+                        .header(csrf.getHeaderName(), csrf.getToken())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"public_token\":\"public-test\"}"))
+                .andExpect(status().isBadGateway())
+                .andExpect(jsonPath("$.connection_id").doesNotExist());
     }
 
     private CsrfToken csrf(MockHttpSession session) throws Exception {

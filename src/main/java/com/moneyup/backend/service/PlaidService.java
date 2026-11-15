@@ -7,9 +7,12 @@ import com.moneyup.backend.Repository.PlaidConnectionRepository;
 import com.moneyup.backend.Repository.UserRepository;
 import com.moneyup.backend.User;
 import com.moneyup.backend.dto.AccountResponse;
+import com.moneyup.backend.dto.ConnectionSetupResponse;
 import com.moneyup.backend.dto.PlaidConnectionResponse;
 import com.plaid.client.model.*;
 import com.plaid.client.request.PlaidApi;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.encrypt.TextEncryptor;
 import org.springframework.stereotype.Service;
@@ -23,12 +26,15 @@ import java.util.*;
 @Service
 public class PlaidService {
 
+    private static final Logger logger = LoggerFactory.getLogger(PlaidService.class);
+
     private final PlaidApi plaidClient;
     private final UserRepository userRepository;
     private final PlaidConnectionRepository plaidConnectionRepository;
     private final TextEncryptor tokenEncryptor;
     private final AccountsRepository accountsRepository;
     private final AccountSnapshotService accountSnapshotService;
+    private final TransactionSyncService transactionSyncService;
 
     public PlaidService(
             PlaidApi plaidClient,
@@ -36,13 +42,14 @@ public class PlaidService {
             PlaidConnectionRepository plaidConnectionRepository,
             TextEncryptor tokenEncryptor,
             AccountsRepository accountsRepository,
-            AccountSnapshotService accountSnapshotService) {
+            AccountSnapshotService accountSnapshotService, TransactionSyncService transactionSyncService) {
         this.plaidClient = plaidClient;
         this.userRepository = userRepository;
         this.plaidConnectionRepository = plaidConnectionRepository;
         this.tokenEncryptor = tokenEncryptor;
         this.accountsRepository = accountsRepository;
         this.accountSnapshotService = accountSnapshotService;
+        this.transactionSyncService = transactionSyncService;
     }
 
     private User getUser(String username) {
@@ -74,7 +81,7 @@ public class PlaidService {
         return body.getLinkToken();
     }
 
-    public String swapPublicToken(String publicToken, String username) throws IOException {
+    public ConnectionSetupResponse swapPublicToken(String publicToken, String username) throws IOException {
         User user = getUser(username);
 
         ItemPublicTokenExchangeRequest request = new ItemPublicTokenExchangeRequest()
@@ -99,9 +106,22 @@ public class PlaidService {
 
 
         PlaidConnection saved = plaidConnectionRepository.save(plaidConnection);
+        boolean initialized;
+        try {
+            initializeConnection(saved, user);
+            initialized = true;
+        } catch (IOException exception) {
+            // Linking succeeded;
+            logger.warn("Could not initialize saved bank connection {}", saved.getId(), exception);
+            initialized = false;
+        }
 
+        return new ConnectionSetupResponse(saved.getId(), initialized);
+    }
 
-        return saved.getId().toString();
+    public void initializeConnection(PlaidConnection plaidConnection, User user) throws IOException {
+        refreshAccounts(plaidConnection, user);
+        transactionSyncService.syncTransactions(plaidConnection);
     }
 
     @Transactional(readOnly = true)
@@ -130,19 +150,23 @@ public class PlaidService {
                 .toList();
     }
 
+    public void refreshAccounts(PlaidConnection connection, User user) throws IOException {
+        AccountsGetRequest request = new AccountsGetRequest()
+                .accessToken(tokenEncryptor.decrypt(connection.getAccessTokenEncrypted()));
+        Response<AccountsGetResponse> response = plaidClient.accountsGet(request).execute();
+        AccountsGetResponse body = response.body();
+        if (!response.isSuccessful() || body == null) {
+            throw new IOException("Plaid account request failed with status: " + response.code());
+        }
+        accountSnapshotService.saveSnapshot(connection.getId(), user.getId(), body);
+    }
+
     public void refreshAccounts(String username) throws IOException {
         User user = getUser(username);
         IOException firstFailure = null;
         for (PlaidConnection connection : plaidConnectionRepository.findAllByUserId(user.getId())) {
             try {
-                AccountsGetRequest request = new AccountsGetRequest()
-                        .accessToken(tokenEncryptor.decrypt(connection.getAccessTokenEncrypted()));
-                Response<AccountsGetResponse> response = plaidClient.accountsGet(request).execute();
-                AccountsGetResponse body = response.body();
-                if (!response.isSuccessful() || body == null) {
-                    throw new IOException("Plaid account request failed with status: " + response.code());
-                }
-                accountSnapshotService.saveSnapshot(connection.getId(), user.getId(), body);
+                refreshAccounts(connection, user);
             } catch (IOException exception) {
                 if (firstFailure == null) firstFailure = exception;
             }

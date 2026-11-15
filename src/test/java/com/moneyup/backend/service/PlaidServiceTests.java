@@ -4,13 +4,14 @@ import com.moneyup.backend.Accounts;
 import com.moneyup.backend.PlaidConnection;
 import com.moneyup.backend.Repository.AccountsRepository;
 import com.moneyup.backend.Repository.PlaidConnectionRepository;
-import com.moneyup.backend.Repository.TransactionRepository;
 import com.moneyup.backend.Repository.UserRepository;
 import com.moneyup.backend.User;
 import com.plaid.client.model.*;
 import com.plaid.client.request.PlaidApi;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.springframework.security.crypto.encrypt.Encryptors;
 import org.springframework.security.crypto.encrypt.TextEncryptor;
 import org.springframework.web.server.ResponseStatusException;
@@ -36,6 +37,8 @@ class PlaidServiceTests {
     private TextEncryptor encryptor;
     private PlaidService service;
     private User user;
+    private TransactionSyncService transactionSync;
+
 
     @BeforeEach
     void setup() {
@@ -45,7 +48,8 @@ class PlaidServiceTests {
         accounts = mock(AccountsRepository.class);
         snapshots = mock(AccountSnapshotService.class);
         encryptor = Encryptors.delux("test-secret-used-only-for-unit-tests", "0011223344556677");
-        service = new PlaidService(api, users, connections, encryptor, accounts, snapshots);
+        transactionSync = mock(TransactionSyncService.class);
+        service = new PlaidService(api, users, connections, encryptor, accounts, snapshots, transactionSync);
         user = new User();
         user.setId(UUID.randomUUID());
         user.setUsername("alice");
@@ -131,7 +135,77 @@ class PlaidServiceTests {
     }
 
     @Test
-    void tokenExchangeSavesEncryptedCredentialsAndReturnsOnlyTheConnectionId() throws Exception {
+    void tokenExchangeSavesCredentialsAndAccountsBeforeSyncingOnlyTheNewConnection() throws Exception {
+        UUID savedId = stubSuccessfulTokenExchange();
+        AccountsGetResponse snapshot = new AccountsGetResponse().accounts(List.of());
+        Call<AccountsGetResponse> accountsCall = success(snapshot);
+        when(api.accountsGet(any())).thenReturn(accountsCall);
+
+        var result = service.swapPublicToken("public-test", "alice");
+
+        assertEquals(savedId, result.connectionId());
+        assertTrue(result.initialized());
+        ArgumentCaptor<PlaidConnection> savedConnection = ArgumentCaptor.forClass(PlaidConnection.class);
+        InOrder order = inOrder(connections, api, snapshots, transactionSync);
+        order.verify(connections).save(savedConnection.capture());
+        order.verify(api).accountsGet(argThat(request -> "access-test".equals(request.getAccessToken())));
+        order.verify(snapshots).saveSnapshot(savedId, user.getId(), snapshot);
+        order.verify(transactionSync).syncTransactions(same(savedConnection.getValue()));
+        verify(connections, never()).findAllByUserId(any());
+        verifyNoInteractions(accounts);
+    }
+
+    @Test
+    void anAccountFetchFailureReturnsTheSavedConnectionWithoutStartingSync() throws Exception {
+        UUID savedId = stubSuccessfulTokenExchange();
+        Call<AccountsGetResponse> failed = call();
+        when(failed.execute()).thenThrow(new IOException("Accounts unavailable"));
+        when(api.accountsGet(any())).thenReturn(failed);
+
+        var result = service.swapPublicToken("public-test", "alice");
+
+        assertEquals(savedId, result.connectionId());
+        assertFalse(result.initialized());
+        verify(connections, times(1)).save(any());
+        verifyNoInteractions(accounts, snapshots, transactionSync);
+    }
+
+    @Test
+    void aSyncFailureReturnsTheSavedConnectionAfterSavingItsAccounts() throws Exception {
+        UUID savedId = stubSuccessfulTokenExchange();
+        AccountsGetResponse snapshot = new AccountsGetResponse().accounts(List.of());
+        Call<AccountsGetResponse> accountsCall = success(snapshot);
+        when(api.accountsGet(any())).thenReturn(accountsCall);
+        doThrow(new IOException("Transactions unavailable")).when(transactionSync).syncTransactions(any());
+
+        var result = service.swapPublicToken("public-test", "alice");
+
+        assertEquals(savedId, result.connectionId());
+        assertFalse(result.initialized());
+        InOrder order = inOrder(snapshots, transactionSync);
+        order.verify(snapshots).saveSnapshot(savedId, user.getId(), snapshot);
+        order.verify(transactionSync).syncTransactions(argThat(connection -> savedId.equals(connection.getId())));
+        verify(connections, times(1)).save(any());
+    }
+
+    @Test
+    void anExchangeFailureStillThrowsBeforeSavingAConnection() throws Exception {
+        Call<ItemPublicTokenExchangeResponse> failed = call();
+        when(failed.execute()).thenThrow(new IOException("Exchange unavailable"));
+        when(api.itemPublicTokenExchange(any())).thenReturn(failed);
+
+        assertThrows(IOException.class, () -> service.swapPublicToken("public-test", "alice"));
+
+        verifyNoInteractions(connections, accounts, snapshots, transactionSync);
+    }
+
+    @Test
+    void anUnknownUserIsRejectedBeforeExchangingTheOneTimeToken() {
+        assertThrows(ResponseStatusException.class, () -> service.swapPublicToken("public-test", "unknown"));
+        verifyNoInteractions(api, connections, accounts, snapshots, transactionSync);
+    }
+
+    private UUID stubSuccessfulTokenExchange() throws IOException {
         var response = new ItemPublicTokenExchangeResponse().accessToken("access-test").itemId("item-one");
         Call<ItemPublicTokenExchangeResponse> call = success(response);
         when(api.itemPublicTokenExchange(any())).thenReturn(call);
@@ -146,14 +220,7 @@ class PlaidServiceTests {
             return connection;
         });
 
-        assertEquals(savedId.toString(), service.swapPublicToken("public-test", "alice"));
-        verifyNoInteractions(accounts, snapshots);
-    }
-
-    @Test
-    void anUnknownUserIsRejectedBeforeExchangingTheOneTimeToken() {
-        assertThrows(ResponseStatusException.class, () -> service.swapPublicToken("public-test", "unknown"));
-        verifyNoInteractions(api, connections, accounts, snapshots);
+        return savedId;
     }
 
     private PlaidConnection connection(String itemId) {

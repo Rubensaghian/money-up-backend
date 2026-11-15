@@ -1,6 +1,7 @@
 package com.moneyup.backend.controller;
 
 import com.moneyup.backend.service.PlaidService;
+import com.moneyup.backend.dto.ConnectionSetupResponse;
 import com.moneyup.backend.dto.PlaidConnectionResponse;
 import com.moneyup.backend.dto.PublicTokenRequest;
 
@@ -36,14 +37,13 @@ public class PlaidController {
     }
 
     @PostMapping("/swap_public_token")
-    public Map<String,String> swapPublicToken(
+    public ConnectionSetupResponse swapPublicToken(
             @Valid @RequestBody PublicTokenRequest request, Authentication authentication) throws IOException {
 
         String username = authentication.getName();
 
         String publicToken = request.publicToken();
-        String connectionId = plaidService.swapPublicToken(publicToken, username);
-        return Map.of("connection_id", connectionId);
+        return plaidService.swapPublicToken(publicToken, username);
     }
 
     @GetMapping("/api/accounts")
@@ -58,5 +58,4 @@ public class PlaidController {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
                 .body(plaidService.getAccounts(authentication.getName()));
     }
-
 }
