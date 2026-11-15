@@ -14,4 +14,6 @@ public interface PlaidConnectionRepository extends JpaRepository<PlaidConnection
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<PlaidConnection> findByIdAndUserId(UUID id, UUID userId);
+
+    Optional<PlaidConnection> findByItemId(String itemId);
 }

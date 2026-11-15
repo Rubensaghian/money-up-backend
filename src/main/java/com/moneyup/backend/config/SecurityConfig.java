@@ -22,6 +22,7 @@ import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.csrf.CsrfAuthenticationStrategy;
 import org.springframework.security.web.csrf.CsrfTokenRepository;
 import org.springframework.security.web.csrf.HttpSessionCsrfTokenRepository;
+import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
@@ -72,7 +73,9 @@ public class SecurityConfig {
             HttpSecurity http,
             CsrfTokenRepository csrfTokenRepository,
             SecurityContextRepository securityContextRepository) throws Exception {
-        http.csrf(csrf -> csrf.csrfTokenRepository(csrfTokenRepository))
+        http.csrf(csrf -> csrf.csrfTokenRepository(csrfTokenRepository)
+                        .ignoringRequestMatchers(PathPatternRequestMatcher.withDefaults()
+                                .matcher(HttpMethod.POST, "/api/plaid/webhook")))
                 .securityContext(context -> context.securityContextRepository(securityContextRepository))
                 .cors(cors -> {})
                 .authorizeHttpRequests(
@@ -80,6 +83,8 @@ public class SecurityConfig {
                                 -> auth.requestMatchers(HttpMethod.POST, "/api/auth/login", "/api/auth/signup")
                                 .permitAll()
                                 .requestMatchers(HttpMethod.GET, "/api/auth/csrf")
+                                .permitAll()
+                                .requestMatchers(HttpMethod.POST, "/api/plaid/webhook")
                                 .permitAll()
                                 .anyRequest()
                                 .authenticated())
