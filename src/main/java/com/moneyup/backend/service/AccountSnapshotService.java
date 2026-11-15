@@ -85,7 +85,9 @@ public class AccountSnapshotService {
 
         if (item != null) {
             if (item.getInstitutionId() != null) connection.setInstitutionId(item.getInstitutionId());
-            if (item.getInstitutionName() != null) connection.setInstitutionName(item.getInstitutionName());
+            if (item.getInstitutionName() != null && !item.getInstitutionName().isBlank()) {
+                connection.setInstitutionName(item.getInstitutionName());
+            }
         }
         connection.setAccountsLastFetchedAt(fetchedAt);
 

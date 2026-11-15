@@ -107,6 +107,74 @@ class PlaidServiceTests {
     }
 
     @Test
+    void missingInstitutionNameIsResolvedBeforeSavingAccounts() throws Exception {
+        PlaidConnection connection = connection("item-one");
+        connection.setInstitutionName(null);
+        AccountsGetResponse response = new AccountsGetResponse().accounts(List.of())
+                .item(new Item().itemId("item-one").institutionId("institution-one"));
+        Call<AccountsGetResponse> accountsCall = success(response);
+        Call<InstitutionsGetByIdResponse> institutionCall = success(new InstitutionsGetByIdResponse()
+                .institution(new Institution().institutionId("institution-one").name("Example bank")));
+        when(api.accountsGet(any())).thenReturn(accountsCall);
+        when(api.institutionsGetById(any())).thenReturn(institutionCall);
+
+        service.refreshAccounts(connection, user);
+
+        verify(api).institutionsGetById(argThat(request -> "institution-one".equals(request.getInstitutionId())
+                && request.getCountryCodes().equals(List.of(CountryCode.US))));
+        verify(snapshots).saveSnapshot(eq(connection.getId()), eq(user.getId()),
+                argThat(snapshot -> "Example bank".equals(snapshot.getItem().getInstitutionName())));
+    }
+
+    @Test
+    void aSavedBankNameDoesNotRequireAnotherInstitutionLookup() throws Exception {
+        PlaidConnection connection = connection("item-one");
+        connection.setInstitutionId("institution-one");
+        AccountsGetResponse response = new AccountsGetResponse().accounts(List.of())
+                .item(new Item().itemId("item-one").institutionId("institution-one").institutionName(" "));
+        Call<AccountsGetResponse> call = success(response);
+        when(api.accountsGet(any())).thenReturn(call);
+
+        service.refreshAccounts(connection, user);
+
+        verify(api, never()).institutionsGetById(any());
+        assertEquals("Same bank", response.getItem().getInstitutionName());
+        verify(snapshots).saveSnapshot(connection.getId(), user.getId(), response);
+    }
+
+    @Test
+    void anInstitutionLookupFailureDoesNotDiscardTheAccountSnapshot() throws Exception {
+        PlaidConnection connection = connection("item-one");
+        connection.setInstitutionName(null);
+        AccountsGetResponse response = new AccountsGetResponse().accounts(List.of())
+                .item(new Item().itemId("item-one").institutionId("institution-one"));
+        Call<AccountsGetResponse> accountsCall = success(response);
+        Call<InstitutionsGetByIdResponse> failed = call();
+        when(failed.execute()).thenThrow(new IOException("Institution API unavailable"));
+        when(api.accountsGet(any())).thenReturn(accountsCall);
+        when(api.institutionsGetById(any())).thenReturn(failed);
+
+        service.refreshAccounts(connection, user);
+
+        verify(snapshots).saveSnapshot(connection.getId(), user.getId(), response);
+    }
+
+    @Test
+    void missingInstitutionIdentifiersDoNotPreventSavingAccounts() throws Exception {
+        PlaidConnection connection = connection("item-one");
+        connection.setInstitutionName(null);
+        AccountsGetResponse response = new AccountsGetResponse().accounts(List.of())
+                .item(new Item().itemId("item-one"));
+        Call<AccountsGetResponse> call = success(response);
+        when(api.accountsGet(any())).thenReturn(call);
+
+        service.refreshAccounts(connection, user);
+
+        verify(api, never()).institutionsGetById(any());
+        verify(snapshots).saveSnapshot(connection.getId(), user.getId(), response);
+    }
+
+    @Test
     void aFailedBankDoesNotPreventAnotherBankFromRefreshing() throws Exception {
         PlaidConnection first = connection("item-one");
         PlaidConnection second = connection("item-two");

@@ -83,6 +83,17 @@ class AccountSnapshotServiceTests {
     }
 
     @Test
+    void blankInstitutionNamesDoNotEraseTheSavedName() {
+        connection.setInstitutionName("Saved bank");
+        AccountsGetResponse response = snapshot(List.of());
+        response.getItem().setInstitutionName(" ");
+
+        service.saveSnapshot(connectionId, userId, response);
+
+        assertEquals("Saved bank", connection.getInstitutionName());
+    }
+
+    @Test
     void missingBalancesAndSubtypesDoNotHideAccounts() {
         AccountBase unknownBalance = remote("account-one", "Savings", null).subtype(null).balances(null);
         AccountBase availableOnly = remote("account-two", "Checking", null)

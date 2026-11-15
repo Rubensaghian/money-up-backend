@@ -164,7 +164,40 @@ public class PlaidService {
         if (!response.isSuccessful() || body == null) {
             throw new IOException("Plaid account request failed with status: " + response.code());
         }
+        fillInstitutionName(connection, body);
         accountSnapshotService.saveSnapshot(connection.getId(), user.getId(), body);
+    }
+
+    private void fillInstitutionName(PlaidConnection connection, AccountsGetResponse snapshot) {
+        Item item = snapshot.getItem();
+        if (item == null || hasText(item.getInstitutionName())) return;
+
+        String institutionId = hasText(item.getInstitutionId()) ? item.getInstitutionId() : connection.getInstitutionId();
+        if (!hasText(institutionId)) return;
+        if (hasText(connection.getInstitutionName())
+                && (connection.getInstitutionId() == null || institutionId.equals(connection.getInstitutionId()))) {
+            item.setInstitutionName(connection.getInstitutionName());
+            return;
+        }
+
+        try {
+            Response<InstitutionsGetByIdResponse> response = plaidClient.institutionsGetById(
+                    new InstitutionsGetByIdRequest().institutionId(institutionId).countryCodes(List.of(CountryCode.US)))
+                    .execute();
+            InstitutionsGetByIdResponse body = response.body();
+            if (response.isSuccessful() && body != null && body.getInstitution() != null
+                    && hasText(body.getInstitution().getName())) {
+                item.setInstitutionName(body.getInstitution().getName());
+            } else {
+                logger.warn("Could not retrieve the bank's display name. HTTP {}", response.code());
+            }
+        } catch (IOException exception) {
+            logger.warn("Could not retrieve the bank's display name", exception);
+        }
+    }
+
+    private static boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 
     public void refreshAccounts(String username) throws IOException {
