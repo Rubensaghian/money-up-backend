@@ -49,7 +49,8 @@ class PlaidServiceTests {
         snapshots = mock(AccountSnapshotService.class);
         encryptor = Encryptors.delux("test-secret-used-only-for-unit-tests", "0011223344556677");
         transactionSync = mock(TransactionSyncService.class);
-        service = new PlaidService(api, users, connections, encryptor, accounts, snapshots, transactionSync);
+        service = new PlaidService(api, users, connections, encryptor, accounts, snapshots, transactionSync,
+                "https://example.test/api/plaid/webhook");
         user = new User();
         user.setId(UUID.randomUUID());
         user.setUsername("alice");

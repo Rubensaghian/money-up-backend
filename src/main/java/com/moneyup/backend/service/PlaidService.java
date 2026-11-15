@@ -13,6 +13,7 @@ import com.plaid.client.model.*;
 import com.plaid.client.request.PlaidApi;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.encrypt.TextEncryptor;
 import org.springframework.stereotype.Service;
@@ -35,6 +36,7 @@ public class PlaidService {
     private final AccountsRepository accountsRepository;
     private final AccountSnapshotService accountSnapshotService;
     private final TransactionSyncService transactionSyncService;
+    private final String webhookUrl;
 
     public PlaidService(
             PlaidApi plaidClient,
@@ -42,7 +44,9 @@ public class PlaidService {
             PlaidConnectionRepository plaidConnectionRepository,
             TextEncryptor tokenEncryptor,
             AccountsRepository accountsRepository,
-            AccountSnapshotService accountSnapshotService, TransactionSyncService transactionSyncService) {
+            AccountSnapshotService accountSnapshotService,
+            TransactionSyncService transactionSyncService,
+            @Value("${plaid.webhook}") String webhookUrl) {
         this.plaidClient = plaidClient;
         this.userRepository = userRepository;
         this.plaidConnectionRepository = plaidConnectionRepository;
@@ -50,6 +54,7 @@ public class PlaidService {
         this.accountsRepository = accountsRepository;
         this.accountSnapshotService = accountSnapshotService;
         this.transactionSyncService = transactionSyncService;
+        this.webhookUrl = webhookUrl;
     }
 
     private User getUser(String username) {
@@ -68,7 +73,8 @@ public class PlaidService {
                 .clientName("MoneyUp")
                 .products(List.of(Products.TRANSACTIONS))
                 .countryCodes(List.of(CountryCode.US))
-                .language("en");
+                .language("en")
+                .webhook(webhookUrl);
 
         Response<LinkTokenCreateResponse> response =
                 plaidClient.linkTokenCreate(request).execute();
